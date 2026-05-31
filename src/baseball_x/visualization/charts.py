@@ -2,19 +2,40 @@
 
 出力サイズ: 1200×675px（Xのカード推奨サイズ）
 """
-import io
+import importlib.util
 from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
+from loguru import logger
+from matplotlib import font_manager
 
 matplotlib.use("Agg")  # GUIなし環境でも動作させる
 
-try:
-    import japanize_matplotlib  # noqa: F401
-except ImportError:
-    pass  # なくても動く（フォントが文字化けするだけ）
+
+def _setup_japanese_font() -> None:
+    """日本語フォントを matplotlib に登録する。
+
+    japanize_matplotlib は Python 3.12+ で削除された distutils に依存しており
+    import すると失敗するため、パッケージ同梱の IPAexGothic フォント（ipaexg.ttf）を
+    直接登録する。システムに日本語フォントが無い環境でも文字化けを防げる。
+    """
+    spec = importlib.util.find_spec("japanize_matplotlib")
+    if spec is None or not spec.origin:
+        logger.warning("japanize_matplotlib が見つからず日本語フォントを登録できません")
+        return
+    font_path = Path(spec.origin).parent / "fonts" / "ipaexg.ttf"
+    if not font_path.exists():
+        logger.warning(f"日本語フォントが見つかりません: {font_path}")
+        return
+    font_manager.fontManager.addfont(str(font_path))
+    font_name = font_manager.FontProperties(fname=str(font_path)).get_name()
+    plt.rcParams["font.family"] = font_name
+    plt.rcParams["axes.unicode_minus"] = False  # マイナス記号の文字化け回避
+
+
+_setup_japanese_font()
 
 DPI = 100
 WIDTH_PX, HEIGHT_PX = 1200, 675
@@ -86,6 +107,61 @@ def ranking_bar(
         )
 
     ax.set_xlabel(metric_label, fontsize=12)
+    ax.set_title(title, fontsize=14, fontweight="bold", pad=12)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout(pad=1.5)
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
+def percentile_profile(
+    rows: list[dict],
+    team: str,
+    title: str,
+    output_path: str | Path,
+) -> Path:
+    """単一選手の指標別パーセンタイル（リーグ内順位帯）を横棒で可視化する。
+
+    Args:
+        rows: 上から表示したい順に並べた指標の辞書リスト。各要素は
+            {"label": 指標名, "percentile": 0〜100, "value_text": 値の表示文字列}。
+        team: 選手の所属（team_short）。バー色に使用。
+        title: グラフタイトル（選手名・所属を含めると良い）。
+
+    Returns:
+        保存されたファイルのPath。
+    """
+    if not rows:
+        raise ValueError("percentile_profile に渡す rows が空です")
+
+    # 上から読めるよう表示順を反転（barh は下から積むため）
+    items = list(reversed(rows))
+    labels = [r["label"] for r in items]
+    pcts = [r["percentile"] for r in items]
+    base = _team_color(team)
+
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    ax.barh(labels, [100] * len(items), color="#EEEEEE", zorder=1)  # 背景（母集団）
+    bars = ax.barh(labels, pcts, color=base, edgecolor="white", linewidth=0.5, zorder=2)
+
+    for bar, r in zip(bars, items):
+        ax.text(
+            min(bar.get_width() + 2, 100),
+            bar.get_y() + bar.get_height() / 2,
+            f"{r['value_text']}（上位{100 - r['percentile']}%）",
+            va="center",
+            fontsize=10,
+            zorder=3,
+        )
+
+    ax.set_xlim(0, 118)
+    ax.set_xlabel("リーグ内パーセンタイル（規定到達者内・右ほど優秀）", fontsize=11)
+    ax.axvline(50, color="#999999", linestyle="--", linewidth=0.8, zorder=1)  # 平均ライン
     ax.set_title(title, fontsize=14, fontweight="bold", pad=12)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)

@@ -19,6 +19,7 @@ POST_DB_SCHEMA = {
                 {"name": "セイバー", "color": "purple"},
                 {"name": "トレンド", "color": "orange"},
                 {"name": "比較", "color": "blue"},
+                {"name": "選手", "color": "green"},
                 {"name": "雑学", "color": "yellow"},
                 {"name": "その他", "color": "default"},
             ]
@@ -32,6 +33,9 @@ POST_DB_SCHEMA = {
                 {"name": "K-BB%", "color": "purple"},
                 {"name": "CSW%", "color": "purple"},
                 {"name": "xwOBA", "color": "blue"},
+                {"name": "ISO", "color": "blue"},
+                {"name": "本塁打率", "color": "blue"},
+                {"name": "K%", "color": "blue"},
                 {"name": "Barrel%", "color": "blue"},
                 {"name": "HardHit%", "color": "blue"},
                 {"name": "Whiff%", "color": "blue"},
@@ -51,4 +55,31 @@ POST_DB_SCHEMA = {
     "Likes": {"number": {"format": "number"}},
     "Retweets": {"number": {"format": "number"}},
     "Replies": {"number": {"format": "number"}},
+}
+
+
+# 注目選手リスト用DB。活躍してインプレッションが伸びている選手を人間が登録し、
+# run_player_spotlight が Status=未生成 の行を拾って下書きを作る。
+SPOTLIGHT_DB_SCHEMA = {
+    "PlayerName": {"title": {}},
+    "Role": {
+        "select": {
+            "options": [
+                {"name": "投手", "color": "blue"},
+                {"name": "野手", "color": "orange"},
+            ]
+        }
+    },
+    "Status": {
+        "select": {
+            "options": [
+                {"name": "未生成", "color": "yellow"},
+                {"name": "生成済", "color": "green"},
+                {"name": "停止", "color": "gray"},
+            ]
+        }
+    },
+    "Note": {"rich_text": {}},
+    "RequestedAt": {"date": {}},
+    "GeneratedAt": {"date": {}},
 }

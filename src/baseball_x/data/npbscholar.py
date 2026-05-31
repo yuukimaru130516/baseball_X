@@ -55,6 +55,25 @@ def _fetch_json(url: str) -> dict:
     raise RuntimeError(f"Failed to fetch {url} after {MAX_RETRIES} attempts: {last_error}")
 
 
+def _parse_ip(value: object) -> float | None:
+    """投球回表記 "49.2"（49回2/3）を真の小数イニング 49.667 へ換算する。
+
+    小数第1位はアウト数（0/1/2）を表す野球独自表記。欠損・不正値は None。
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        whole_str, _, frac_str = text.partition(".")
+        whole = int(whole_str) if whole_str else 0
+        outs = int(frac_str[0]) if frac_str else 0
+        return whole + outs / 3
+    except (ValueError, IndexError):
+        return None
+
+
 def _to_dataframe(payload: dict, *, role: str, season: int) -> pd.DataFrame:
     """npbscholar の {generated_at, columns, rows} 形式 JSON を DataFrame に変換する。"""
     rows = payload.get("rows")
@@ -63,6 +82,22 @@ def _to_dataframe(payload: dict, *, role: str, season: int) -> pd.DataFrame:
         raise ValueError(f"Unexpected JSON shape for {role} (season={season}): {list(payload.keys())}")
 
     df = pd.DataFrame(rows)
+
+    # JSON は数値も文字列（"49.2" 等）で返すため、columns メタデータの type を
+    # 手がかりに数値列を数値へ変換する。変換できない値は NaN に落とす。
+    # type=="ip" は投球回表記（"49.2" = 49回2/3）なので真の小数イニングへ換算する。
+    for col in columns:
+        if not isinstance(col, dict):
+            continue
+        key = col.get("key")
+        if key not in df.columns:
+            continue
+        col_type = col.get("type")
+        if col_type == "number":
+            df[key] = pd.to_numeric(df[key], errors="coerce")
+        elif col_type == "ip":
+            df[key] = df[key].map(_parse_ip)
+
     df.attrs["generated_at"] = payload.get("generated_at")
     df.attrs["season"] = season
     df.attrs["role"] = role

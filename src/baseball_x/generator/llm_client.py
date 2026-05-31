@@ -6,8 +6,8 @@ from baseball_x.generator.prompts import SYSTEM_PROMPT
 
 _client: anthropic.Anthropic | None = None
 
-MODEL = "claude-haiku-4-5"
-MAX_TOKENS = 300
+MODEL = "claude-sonnet-4-6"
+MAX_TOKENS = 600
 
 
 def get_client() -> anthropic.Anthropic:
